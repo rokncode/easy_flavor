@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:mason_logger/mason_logger.dart';
 
 import '../config/config_loader.dart';
@@ -6,6 +8,8 @@ import '../core/exceptions.dart';
 import '../core/flutter_project.dart';
 import '../core/generator.dart';
 import '../core/pipeline.dart';
+import '../core/project_context.dart';
+import '../ios/deployment_target.dart';
 import '../core/summary.dart';
 import 'base_command.dart';
 
@@ -51,11 +55,24 @@ class DoctorCommand extends EasyFlavorCommand {
         const Issue(Severity.warning, 'flutter is not on PATH.'),
       for (final g in defaultGenerators)
         if (g case final Checker c) ...c.check(context, config),
+      ...await _xcodeIssues(context),
     ];
     _report(issues);
     return issues.any((i) => i.severity == Severity.error)
         ? ExitCode.software.code
         : ExitCode.success.code;
+  }
+
+  Future<List<Issue>> _xcodeIssues(ProjectContext context) async {
+    if (!Platform.isMacOS || !context.exists('ios')) return const [];
+    try {
+      final result = await processRunner.run('xcodebuild', ['-version']);
+      if (result.exitCode != 0) return const [];
+      final major = parseXcodeMajor(result.stdout.toString());
+      return major == null ? const [] : deploymentTargetIssues(context, major);
+    } on ToolError {
+      return const [];
+    }
   }
 
   void _report(List<Issue> issues) {
