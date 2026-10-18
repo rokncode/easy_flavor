@@ -231,8 +231,8 @@ class IosGenerator implements Generator, Checker {
       throw ProjectError(
         '$runnerScheme not found.',
         hint:
-            'Open ios/Runner.xcworkspace in Xcode once (it creates the shared '
-            'Runner scheme), or restore it from `flutter create`.',
+            'In Xcode: Product > Scheme > Manage Schemes, tick "Shared" for '
+            'Runner. Or copy it from a fresh `flutter create`.',
       );
     }
     for (final f in config.flavorNames) {

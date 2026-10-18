@@ -12,7 +12,8 @@ import 'package:test/test.dart';
 
 import 'fake_process_runner.dart';
 
-/// Fixture projects in test/fixtures:
+/// Fixture projects in test/fixtures (pubspec.yaml and .dart files are
+/// stored as `*.tmpl`):
 /// * fresh_kts: files from `flutter create` (Flutter 3.44, Kotlin DSL).
 /// * groovy: the older Groovy-DSL template.
 /// * existing_flavors: Groovy with hand-written productFlavors and an
@@ -31,7 +32,15 @@ void copyDirectory(Directory from, Directory to) {
   for (final entity in from.listSync(recursive: true)) {
     final rel = p.relative(entity.path, from: from.path);
     if (entity is File) {
-      final dest = File(p.join(to.path, rel));
+      // Fixture pubspec/Dart files carry a .tmpl suffix so they are not
+      // treated as a real package (by dart format, pana, or IDEs running
+      // `pub get`).
+      final dest = File(
+        p.join(
+          to.path,
+          rel.endsWith('.tmpl') ? rel.substring(0, rel.length - 5) : rel,
+        ),
+      );
       dest.parent.createSync(recursive: true);
       entity.copySync(dest.path);
     }
