@@ -3,8 +3,8 @@ description: >-
   A CLI that sets up Flutter flavors (dev, staging, prod, ...) for Android and
   iOS in new or existing projects, with optional Firebase integration.
 version: 0.1.0
-repository: https://github.com/your-org/easy_flavor
-issue_tracker: https://github.com/your-org/easy_flavor/issues
+repository: https://github.com/rokncode/easy_flavor
+issue_tracker: https://github.com/rokncode/easy_flavor/issues
 topics:
   - flutter
   - flavors

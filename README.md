@@ -383,7 +383,7 @@ Commit or stash, or pass `--force`.
 
 **Something went wrong.**
 Run `easy_flavor restore` to undo the last run, then `easy_flavor doctor`.
-Please [open an issue](https://github.com/your-org/easy_flavor/issues) with
+Please [open an issue](https://github.com/rokncode/easy_flavor/issues) with
 the `--dry-run --verbose` output.
 
 ## Limitations
