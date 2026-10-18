@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'process_runner.dart';
+
 enum ChangeKind { create, modify, delete }
 
 /// A single planned filesystem change, relative to the project root.
@@ -23,6 +25,31 @@ class FileChange {
   final String? reason;
 }
 
+/// An external tool run after the files are written (e.g. `flutterfire
+/// configure`).
+class ExternalCommand {
+  ExternalCommand(
+    this.executable,
+    this.arguments, {
+    required this.reason,
+    this.preserve = const [],
+  });
+
+  final String executable;
+  final List<String> arguments;
+  final String reason;
+
+  /// Files the tool modifies that easy_flavor manages itself; they are
+  /// restored to their planned content after the command runs.
+  final List<String> preserve;
+
+  String get display => [executable, ...arguments.map(_shellQuote)].join(' ');
+
+  static String _shellQuote(String s) => RegExp(r'^[\w@%+=:,./-]+$').hasMatch(s)
+      ? s
+      : "'${s.replaceAll("'", r"'\''")}'";
+}
+
 /// Collects every change a command intends to make so it can be previewed
 /// (`--dry-run`), backed up, and then written in one pass.
 ///
@@ -35,10 +62,15 @@ class ChangeSet {
 
   final String root;
   final _changes = <String, FileChange>{};
+  final _commands = <ExternalCommand>[];
 
   List<FileChange> get changes => List.unmodifiable(_changes.values);
 
-  bool get isEmpty => _changes.isEmpty;
+  List<ExternalCommand> get commands => List.unmodifiable(_commands);
+
+  bool get isEmpty => _changes.isEmpty && _commands.isEmpty;
+
+  void run(ExternalCommand command) => _commands.add(command);
 
   /// Current content of [relativePath], taking planned changes into account.
   String? read(String relativePath) {
@@ -85,8 +117,29 @@ class ChangeSet {
     return f.existsSync() ? f.readAsStringSync() : null;
   }
 
-  /// Writes every change to disk. Directories emptied by deletions are
-  /// removed, up to (not including) [root].
+  /// Writes every change, then runs the commands in order.
+  Future<void> applyAll(ProcessRunner runner) async {
+    apply();
+    for (final command in _commands) {
+      final snapshot = {for (final path in command.preserve) path: read(path)};
+      await runner.runInherit(
+        command.executable,
+        command.arguments,
+        workingDirectory: root,
+      );
+      snapshot.forEach((path, content) {
+        final file = File(p.join(root, path));
+        if (content == null) {
+          if (file.existsSync()) file.deleteSync();
+        } else if (!file.existsSync() || file.readAsStringSync() != content) {
+          file.writeAsStringSync(content);
+        }
+      });
+    }
+  }
+
+  /// Writes every file change to disk (commands are not run). Directories
+  /// emptied by deletions are removed, up to (not including) [root].
   void apply() {
     for (final c in _changes.values) {
       final file = File(p.join(root, c.path));

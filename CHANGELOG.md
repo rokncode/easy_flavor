@@ -15,4 +15,15 @@
   list, per-configuration xcconfig files (bundle id, display name, CocoaPods
   include), shared schemes per flavor, `CFBundleDisplayName =
   $(APP_DISPLAY_NAME)`, and the Podfile configuration map.
+- Firebase (`--firebase`): checks for the Firebase and FlutterFire CLIs
+  (with install instructions) and login (or CI credentials), runs
+  `flutterfire configure` per flavor into `lib/firebase/`,
+  `android/app/src/<flavor>/` and `ios/config/<flavor>/`, adds
+  `firebase_core`, initialises Firebase in each entry point, and copies the
+  flavor's `GoogleService-Info.plist` with an easy_flavor Run Script phase
+  (FlutterFire's own Xcode edits are reverted). Per-flavor Firebase projects
+  via `--firebase-projects` or `firebase_project` in easy_flavor.yaml.
+- `lib/main.dart`'s `main()` delegates to the default flavor's entry point.
+- `doctor` warns when the iOS deployment target is below what the installed
+  Xcode supports.
 - `create` runs `flutter create` and writes the flavor setup.

@@ -4,10 +4,13 @@ import 'package:easy_flavor/easy_flavor.dart';
 import 'package:easy_flavor/src/core/change_set.dart';
 import 'package:easy_flavor/src/core/generator.dart';
 import 'package:easy_flavor/src/core/pipeline.dart';
+import 'package:easy_flavor/src/core/process_runner.dart';
 import 'package:easy_flavor/src/core/project_context.dart';
 import 'package:mason_logger/mason_logger.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+import 'fake_process_runner.dart';
 
 /// Fixture projects in test/fixtures:
 /// * fresh_kts: files from `flutter create` (Flutter 3.44, Kotlin DSL).
@@ -35,10 +38,12 @@ void copyDirectory(Directory from, Directory to) {
   }
 }
 
-ProjectContext contextFor(Directory dir) => ProjectContext(
-  root: dir.path,
-  logger: Logger(level: Level.quiet),
-);
+ProjectContext contextFor(Directory dir, {ProcessRunner? processRunner}) =>
+    ProjectContext(
+      root: dir.path,
+      logger: Logger(level: Level.quiet),
+      processRunner: processRunner ?? FakeProcessRunner(),
+    );
 
 /// Plans [generators] for [config] in [dir].
 Future<ChangeSet> plan(
@@ -46,8 +51,9 @@ Future<ChangeSet> plan(
   EasyFlavorConfig config, {
   EasyFlavorConfig? previous,
   List<Generator> generators = defaultGenerators,
+  ProcessRunner? processRunner,
 }) => planChanges(
-  context: contextFor(dir),
+  context: contextFor(dir, processRunner: processRunner),
   config: config,
   previous: previous,
   generators: generators,
@@ -130,3 +136,12 @@ dependencies:
   }
   return dir;
 }
+
+/// [config] with Firebase on and project `<flavor>-proj` for each flavor.
+EasyFlavorConfig withFirebase(EasyFlavorConfig config) => config.copyWith(
+  firebase: true,
+  flavors: [
+    for (final f in config.flavors)
+      f.copyWith(firebaseProjectId: '${f.name}-proj'),
+  ],
+);

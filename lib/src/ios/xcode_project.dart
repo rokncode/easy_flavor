@@ -184,6 +184,66 @@ class XcodeProject {
     return null;
   }
 
+  /// Id of the shell script phase named [name] on the app target, if any.
+  String? scriptPhaseNamed(String name) {
+    for (final id in _appBuildPhaseIds) {
+      final phase = pbx.object(id);
+      if (phase?['isa'] == 'PBXShellScriptBuildPhase' &&
+          phase?['name'] == name) {
+        return id;
+      }
+    }
+    return null;
+  }
+
+  /// Adds (or updates) a shell script phase on the app target, right after
+  /// its Resources phase.
+  void setScriptPhase({
+    required String name,
+    required String script,
+    List<String> inputPaths = const [],
+    List<String> outputPaths = const [],
+  }) {
+    final phase = <String, Object>{
+      'isa': 'PBXShellScriptBuildPhase',
+      'buildActionMask': '2147483647',
+      'files': <Object>[],
+      'inputFileListPaths': <Object>[],
+      'inputPaths': <Object>[...inputPaths],
+      'name': name,
+      'outputFileListPaths': <Object>[],
+      'outputPaths': <Object>[...outputPaths],
+      'runOnlyForDeploymentPostprocessing': '0',
+      'shellPath': '/bin/sh',
+      'shellScript': script,
+    };
+    final existing = scriptPhaseNamed(name);
+    if (existing != null) {
+      pbx.add(existing, phase, comment: name);
+      return;
+    }
+    final id = pbx.newId('easy_flavor:phase:$name');
+    pbx.add(id, phase, comment: name);
+    final phases = _appBuildPhases;
+    final resources = phases.indexWhere(
+      (p) => pbx.object(p as String)?['isa'] == 'PBXResourcesBuildPhase',
+    );
+    phases.insert(resources == -1 ? phases.length : resources + 1, id);
+  }
+
+  void removeScriptPhase(String name) {
+    final id = scriptPhaseNamed(name);
+    if (id == null) return;
+    _appBuildPhases.remove(id);
+    pbx.remove(id);
+  }
+
+  /// The app target's build phase ids (the live list, for editing).
+  List<Object> get _appBuildPhases =>
+      appTarget.object['buildPhases']! as List<Object>;
+
+  List<String> get _appBuildPhaseIds => _appBuildPhases.cast<String>();
+
   /// Sets build setting [key] on [configId], inserting new keys in
   /// alphabetical position as Xcode does.
   void setBuildSetting(String configId, String key, Object value) {

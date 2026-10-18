@@ -52,6 +52,8 @@ void main() {
         'dev=com.company.myapp.dev,staging=com.company.myapp.stg,prod=com.company.myapp',
         '--app-names', 'dev=MyApp Dev,staging=MyApp Stg,prod=MyApp',
         '--firebase',
+        '--firebase-projects',
+        'dev=myapp-dev,staging=myapp-stg,prod=myapp-prod',
       ]);
       expect(r.exitCode, 0, reason: r.output);
       expect(
@@ -61,6 +63,8 @@ void main() {
       expect(r.stdout, contains('MyApp Stg'));
       expect(r.stdout, contains('com.company.myapp.stg'));
       expect(r.stdout, contains('Dry run'));
+      expect(r.stdout, contains('run     flutterfire configure --yes'));
+      expect(r.stdout, contains('--project=myapp-stg'));
       expect(Directory(p.join(parent.path, 'my_app')).existsSync(), isFalse);
     });
 

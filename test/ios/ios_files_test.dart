@@ -21,6 +21,7 @@ void main() {
 
 PRODUCT_BUNDLE_IDENTIFIER = com.a.dev
 APP_DISPLAY_NAME = A /\$()/ B
+EASY_FLAVOR = dev
 ''');
     },
   );

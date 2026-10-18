@@ -21,12 +21,10 @@ void main() {
       expect(r.runMainAppReturnsFuture, isFalse);
       expect(r.source, '''
 import 'package:flutter/material.dart';
-import 'flavors.dart';
+import 'main_prod.dart' as default_flavor; $defaultFlavorMarker
 
-void main() {
-  FlavorConfig.init(Flavor.prod); $defaultFlavorMarker
-  runMainApp();
-}
+// Plain `flutter run` (without -t) starts the default flavor.
+Future<void> main() => default_flavor.main();
 
 void runMainApp() {
   runApp(const MyApp());
@@ -42,11 +40,14 @@ void runMainApp() {
       expect(r.runMainAppReturnsFuture, isTrue);
       expect(
         r.source,
-        startsWith("import 'flavors.dart';\n\nFuture<void> main() async {"),
+        startsWith(
+          "import 'main_dev.dart' as default_flavor; $defaultFlavorMarker\n\n"
+          '// Plain',
+        ),
       );
       expect(
         r.source,
-        contains('  await runMainApp();\n}\n\n/// Starts the app.\n@pragma'),
+        contains('default_flavor.main();\n\n/// Starts the app.\n@pragma'),
       );
       expect(r.source, contains('Future<void> runMainApp() async {'));
     });
@@ -65,9 +66,11 @@ void runMainApp() {
       final changed = refactorMainDart(once, 'dev').source;
       expect(
         changed,
-        contains('FlavorConfig.init(Flavor.dev); $defaultFlavorMarker'),
+        contains(
+          "import 'main_dev.dart' as default_flavor; $defaultFlavorMarker",
+        ),
       );
-      expect('runMainApp('.allMatches(changed), hasLength(2));
+      expect('runMainApp('.allMatches(changed), hasLength(1));
     });
 
     test('leaves a hand-written runMainApp alone', () {
@@ -104,6 +107,21 @@ void runMainApp() {
       expect(second, contains("baseUrl: 'https://dev.internal' /* mine */,"));
       expect(second, contains("baseUrl: 'https://api.qa.example.com',"));
       expect(second, contains('enum Flavor { dev, qa, prod }'));
+    });
+
+    test('entry points with and without Firebase', () {
+      final plain = renderMainEntry('dev', awaitRunMainApp: false);
+      expect(plain, isNot(contains('firebase')));
+      expect(
+        plain,
+        contains(
+          'Future<void> main() async {\n  FlavorConfig.init(Flavor.dev);\n  runMainApp();\n}',
+        ),
+      );
+      final fb = renderMainEntry('dev', awaitRunMainApp: true, firebase: true);
+      expect(fb, contains("import 'firebase/firebase_options_dev.dart';"));
+      expect(fb, contains('options: DefaultFirebaseOptions.currentPlatform'));
+      expect(fb, contains('  await runMainApp();'));
     });
 
     test('escapes app titles', () {
@@ -159,7 +177,7 @@ void runMainApp() {
         expect(readDefaultFlavor(read(dir, 'pubspec.yaml')), 'dev');
         expect(
           read(dir, 'lib/main.dart'),
-          contains('FlavorConfig.init(Flavor.dev);'),
+          contains("import 'main_dev.dart' as default_flavor;"),
         );
       },
     );

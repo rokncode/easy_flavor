@@ -65,4 +65,9 @@ void printChanges(Logger logger, ChangeSet changes) {
     final reason = c.reason == null ? '' : darkGray.wrap('  (${c.reason})');
     logger.info('  $tag  ${c.path}$reason');
   }
+  for (final c in changes.commands) {
+    logger.info(
+      '  ${lightMagenta.wrap('run   ')}  ${c.display}${darkGray.wrap('  (${c.reason})')}',
+    );
+  }
 }

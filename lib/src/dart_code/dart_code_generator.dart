@@ -70,7 +70,11 @@ class DartCodeGenerator implements Generator, Checker {
       }
       changes.write(
         path,
-        renderMainEntry(f, awaitRunMainApp: refactor.runMainAppReturnsFuture),
+        renderMainEntry(
+          f,
+          awaitRunMainApp: refactor.runMainAppReturnsFuture,
+          firebase: config.firebase,
+        ),
         reason: 'entry point',
       );
     }

@@ -18,6 +18,7 @@ Future<int> runSetup({
   bool allowWrite = false,
 }) async {
   final logger = context.logger;
+  config = promptFirebaseProjects(context, config);
   logger.info('');
   printFlavorTable(logger, config);
   logger.info('');
@@ -28,7 +29,10 @@ Future<int> runSetup({
     config: config,
     previous: previous,
   );
-  progress.complete('Planned ${changes.changes.length} file change(s)');
+  progress.complete(
+    'Planned ${changes.changes.length} file change(s)'
+    '${changes.commands.isEmpty ? '' : ' and ${changes.commands.length} command(s)'}',
+  );
   printChanges(logger, changes);
 
   if (changes.isEmpty) return ExitCode.success.code;
@@ -56,11 +60,37 @@ Future<int> runSetup({
     );
     return ExitCode.success.code;
   }
-  changes.apply();
+  await changes.applyAll(context.processRunner);
   logger.success('Flavors configured in ${context.root}.');
 
   printRunCommands(logger, config);
   return ExitCode.success.code;
+}
+
+/// Asks for missing Firebase project ids when Firebase is enabled and
+/// prompts are allowed (the generator reports them otherwise).
+EasyFlavorConfig promptFirebaseProjects(
+  ProjectContext context,
+  EasyFlavorConfig config,
+) {
+  if (!config.firebase || !context.interactive) return config;
+  if (config.flavors.every((f) => f.firebaseProjectId != null)) return config;
+  context.logger.info(
+    'Each flavor needs a Firebase project id (see `firebase projects:list`).',
+  );
+  return config.copyWith(
+    flavors: [
+      for (final f in config.flavors)
+        if (f.firebaseProjectId != null)
+          f
+        else
+          f.copyWith(
+            firebaseProjectId: context.logger.prompt(
+              'Firebase project id for "${f.name}":',
+            ).trim(),
+          ),
+    ],
+  );
 }
 
 /// Asks for flavors when none were given and prompts are allowed.

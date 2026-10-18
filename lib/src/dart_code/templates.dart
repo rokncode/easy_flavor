@@ -96,30 +96,45 @@ Map<String, String> readBaseUrls(String source) {
   return result;
 }
 
+String firebaseOptionsFile(String flavor) =>
+    'lib/firebase/firebase_options_$flavor.dart';
+
 /// Renders `lib/main_<flavor>.dart`. [awaitRunMainApp] must be true when
-/// `runMainApp` returns a Future.
-String renderMainEntry(String flavor, {required bool awaitRunMainApp}) {
-  final body = awaitRunMainApp
-      ? '''
-Future<void> main() async {
-  FlavorConfig.init(Flavor.$flavor);
-  await runMainApp();
-}
-'''
-      : '''
-void main() {
-  FlavorConfig.init(Flavor.$flavor);
-  runMainApp();
-}
-''';
-  return '''
-$generatedDartHeader
-// flutter run --flavor $flavor -t lib/main_$flavor.dart
-
-import 'flavors.dart';
-import 'main.dart' show runMainApp;
-
-$body''';
+/// `runMainApp` returns a Future. With [firebase], Firebase is initialised
+/// with the flavor's options before the app starts.
+String renderMainEntry(
+  String flavor, {
+  required bool awaitRunMainApp,
+  bool firebase = false,
+}) {
+  final b = StringBuffer()
+    ..writeln(generatedDartHeader)
+    ..writeln('// flutter run --flavor $flavor -t lib/main_$flavor.dart')
+    ..writeln();
+  if (firebase) {
+    b
+      ..writeln("import 'package:firebase_core/firebase_core.dart';")
+      ..writeln("import 'package:flutter/widgets.dart';")
+      ..writeln()
+      ..writeln("import 'firebase/firebase_options_$flavor.dart';");
+  }
+  b
+    ..writeln("import 'flavors.dart';")
+    ..writeln("import 'main.dart' show runMainApp;")
+    ..writeln()
+    ..writeln('Future<void> main() async {');
+  if (firebase) b.writeln('  WidgetsFlutterBinding.ensureInitialized();');
+  b.writeln('  FlavorConfig.init(Flavor.$flavor);');
+  if (firebase) {
+    b
+      ..writeln('  await Firebase.initializeApp(')
+      ..writeln('    options: DefaultFirebaseOptions.currentPlatform,')
+      ..writeln('  );');
+  }
+  b
+    ..writeln(awaitRunMainApp ? '  await runMainApp();' : '  runMainApp();')
+    ..writeln('}');
+  return b.toString();
 }
 
 /// A single-quoted Dart string literal for [value].

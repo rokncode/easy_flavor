@@ -112,7 +112,8 @@ class IosGenerator implements Generator, Checker {
           // Let the xcconfig values win over target-level settings.
           xcode.buildSettings(id)
             ..remove('PRODUCT_BUNDLE_IDENTIFIER')
-            ..remove(displayNameSetting);
+            ..remove(displayNameSetting)
+            ..remove(flavorSetting);
           _moveBaseConfigurationRefFirst(c);
         }
       }
@@ -168,10 +169,12 @@ class IosGenerator implements Generator, Checker {
       updated,
       reason: 'CFBundleDisplayName = \$($displayNameSetting)',
     );
-    final name = config.flavor(defaultFlavor(config))!.appName;
+    final fallback = config.flavor(defaultFlavor(config))!;
     xcode.configsByName(app.listId).forEach((configName, id) {
       if (baseConfigurations.contains(configName)) {
-        xcode.setBuildSetting(id, displayNameSetting, name);
+        xcode
+          ..setBuildSetting(id, displayNameSetting, fallback.appName)
+          ..setBuildSetting(id, flavorSetting, fallback.name);
       }
     });
   }

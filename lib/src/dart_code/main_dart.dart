@@ -2,7 +2,7 @@ import '../core/exceptions.dart';
 
 const mainFile = 'lib/main.dart';
 
-/// Comment on the line that selects the default flavor in `lib/main.dart`.
+/// Comment on the import that selects the default flavor in `lib/main.dart`.
 const defaultFlavorMarker = '// easy_flavor:default-flavor';
 
 // A top-level function declaration starting at column 0, with an optional
@@ -17,10 +17,19 @@ RegExp _topLevelFunction(String name) => RegExp(
 
 final _runMainAppDecl = _topLevelFunction('runMainApp');
 final _mainDecl = _topLevelFunction('main');
-final _defaultFlavorLine = RegExp(
-  r'FlavorConfig\.init\(Flavor\.(\w+)\);(\s*)' +
+final _defaultFlavorImport = RegExp(
+  r"^import\s+'main_(\w+)\.dart'\s+as\s+default_flavor;[ \t]*" +
       RegExp.escape(defaultFlavorMarker),
+  multiLine: true,
 );
+
+String _defaultFlavorImportLine(String flavor) =>
+    "import 'main_$flavor.dart' as default_flavor; $defaultFlavorMarker";
+
+const _newMain =
+    '// Plain `flutter run` (without -t) starts the default flavor.\n'
+    'Future<void> main() => default_flavor.main();\n'
+    '\n';
 
 /// Result of [refactorMainDart].
 class MainDartRefactor {
@@ -33,24 +42,22 @@ class MainDartRefactor {
 /// Refactors `lib/main.dart` so flavor entry points can share it:
 ///
 /// * the existing top-level `main` is renamed to `runMainApp`;
-/// * a new `main` is added that selects [flavor] and calls `runMainApp`, so
-///   `lib/main.dart` keeps working as the default entry point;
-/// * `import 'flavors.dart';` is added.
+/// * a new `main` delegates to the default flavor's entry point
+///   (`lib/main_<flavor>.dart`), so plain `flutter run` keeps working and
+///   goes through the same start-up (flavor, Firebase) as `-t`.
 ///
-/// On an already refactored file only the default flavor is updated. A file
-/// that declares `runMainApp` without easy_flavor's marker was set up by hand
-/// and is left alone.
+/// On an already refactored file only the default-flavor import is updated.
+/// A file that declares `runMainApp` without easy_flavor's marker was set up
+/// by hand and is left alone.
 MainDartRefactor refactorMainDart(String source, String flavor) {
   final existing = _runMainAppDecl.firstMatch(source);
   if (existing != null) {
-    final returnsFuture = existing.group(1)?.startsWith('Future') ?? false;
     return MainDartRefactor(
-      source.replaceFirstMapped(
-        _defaultFlavorLine,
-        (m) =>
-            'FlavorConfig.init(Flavor.$flavor);${m.group(2)}$defaultFlavorMarker',
+      source.replaceFirst(
+        _defaultFlavorImport,
+        _defaultFlavorImportLine(flavor),
       ),
-      runMainAppReturnsFuture: returnsFuture,
+      runMainAppReturnsFuture: existing.group(1)?.startsWith('Future') ?? false,
     );
   }
 
@@ -78,37 +85,13 @@ MainDartRefactor refactorMainDart(String source, String flavor) {
     nameStart + 'main'.length,
     'runMainApp',
   );
-
-  final newMain = returnsFuture
-      ? '''
-Future<void> main() async {
-  FlavorConfig.init(Flavor.$flavor); $defaultFlavorMarker
-  await runMainApp();
-}
-
-'''
-      : '''
-void main() {
-  FlavorConfig.init(Flavor.$flavor); $defaultFlavorMarker
-  runMainApp();
-}
-
-''';
-  result = result.replaceRange(
-    _declarationStart(result, main.start),
-    _declarationStart(result, main.start),
-    newMain,
-  );
+  final at = _declarationStart(result, main.start);
+  result = result.replaceRange(at, at, _newMain);
   return MainDartRefactor(
-    _addImport(result, "import 'flavors.dart';"),
+    _addImport(result, _defaultFlavorImportLine(flavor)),
     runMainAppReturnsFuture: returnsFuture,
   );
 }
-
-/// Whether [source] (a refactored main.dart) has `runMainApp` returning a
-/// Future. Defaults to false.
-bool runMainAppReturnsFuture(String source) =>
-    _runMainAppDecl.firstMatch(source)?.group(1)?.startsWith('Future') ?? false;
 
 /// Moves [offset] up past doc comments and annotations directly above it, so
 /// the new main does not end up between `runMainApp` and its comments.
@@ -128,12 +111,8 @@ int _declarationStart(String source, int offset) {
 }
 
 String _addImport(String source, String directive) {
-  if (source.contains(directive) ||
-      source.contains(directive.replaceAll("'", '"'))) {
-    return source;
-  }
   final imports = RegExp(
-    r'''^import\s+['"][^'"]+['"][^;]*;[ \t]*\n''',
+    r'''^import\s+['"][^'"]+['"][^;]*;[^\n]*\n''',
     multiLine: true,
   ).allMatches(source).toList();
   if (imports.isEmpty) return '$directive\n\n$source';

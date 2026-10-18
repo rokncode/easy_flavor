@@ -10,6 +10,10 @@ const runnerScheme = '$schemesDir/Runner.xcscheme';
 /// Build setting holding the per-flavor display name.
 const displayNameSetting = 'APP_DISPLAY_NAME';
 
+/// Build setting holding the flavor name, for build phases (e.g. copying the
+/// flavor's GoogleService-Info.plist).
+const flavorSetting = 'EASY_FLAVOR';
+
 /// `ios/Flutter/<base>-<flavor>.xcconfig`.
 String xcconfigFileName(String base, String flavor) => '$base-$flavor.xcconfig';
 String xcconfigPath(String base, String flavor) =>
@@ -36,6 +40,7 @@ $generatedXcconfigHeader Do not edit; change easy_flavor.yaml instead.
 
 PRODUCT_BUNDLE_IDENTIFIER = ${flavor.iosBundleId}
 $displayNameSetting = ${xcconfigValue(flavor.appName)}
+$flavorSetting = ${flavor.name}
 ''';
 }
 
