@@ -1,0 +1,18 @@
+flavors:
+  dev:
+    app_name: "MyApp Dev"
+    android_id: com.company.myapp.dev
+    ios_bundle_id: com.company.myapp.dev
+    firebase_project: myapp-dev
+  staging:
+    app_name: "MyApp Stg"
+    android_id: com.company.myapp.stg
+    ios_bundle_id: com.company.myapp.stg
+    firebase_project: myapp-staging
+  prod:
+    app_name: "MyApp"
+    android_id: com.company.myapp
+    ios_bundle_id: com.company.myapp
+    firebase_project: myapp-prod
+firebase: true
+ide: [vscode, android-studio]
