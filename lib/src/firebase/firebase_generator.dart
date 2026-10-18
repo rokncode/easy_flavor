@@ -89,11 +89,12 @@ class FirebaseGenerator implements Generator, Checker {
 
     if (!_dependsOnFirebaseCore(changes.read('pubspec.yaml'))) {
       changes.run(
-        ExternalCommand('flutter', [
-          'pub',
-          'add',
-          'firebase_core',
-        ], reason: 'Firebase dependency'),
+        ExternalCommand(
+          'flutter',
+          ['pub', 'add', 'firebase_core'],
+          reason: 'Firebase dependency',
+          mayModify: const ['pubspec.yaml', 'pubspec.lock'],
+        ),
       );
     }
 
@@ -121,6 +122,16 @@ class FirebaseGenerator implements Generator, Checker {
           // flutterfire edits the Xcode project through Ruby; easy_flavor
           // manages it and adds its own copy phase instead.
           preserve: [if (hasIos) pbxprojFile],
+          mayModify: [
+            ...flutterfireOutputs(f.name, android: hasAndroid, ios: hasIos),
+            'firebase.json',
+            'android/settings.gradle',
+            'android/settings.gradle.kts',
+            'android/build.gradle',
+            'android/build.gradle.kts',
+            'android/app/build.gradle',
+            'android/app/build.gradle.kts',
+          ],
         ),
       );
     }
@@ -204,6 +215,17 @@ class FirebaseGenerator implements Generator, Checker {
     return issues;
   }
 }
+
+/// Files `flutterfire configure` writes for [flavor].
+List<String> flutterfireOutputs(
+  String flavor, {
+  required bool android,
+  required bool ios,
+}) => [
+  firebaseOptionsFile(flavor),
+  if (android) googleServicesJsonPath(flavor),
+  if (ios) googleServiceInfoPlistPath(flavor),
+];
 
 /// Arguments for `flutterfire configure` for one flavor.
 List<String> flutterfireArgs(

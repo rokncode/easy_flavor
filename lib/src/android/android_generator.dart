@@ -37,7 +37,7 @@ class AndroidGenerator implements Generator, Checker {
     final previousFlavors = gradle.managedFlavors;
     changes.write(
       gradle.path,
-      gradle.withFlavors(config.flavors, appName),
+      gradle.withFlavors(config.flavors, appName, merge: config.mergeExisting),
       reason: 'productFlavors',
     );
 
@@ -149,7 +149,7 @@ class AndroidGenerator implements Generator, Checker {
       );
     }
     final unmanaged = gradle.unmanagedFlavors;
-    if (unmanaged.isNotEmpty) {
+    if (unmanaged.isNotEmpty && !config.mergeExisting) {
       issues.add(
         Issue(
           Severity.warning,

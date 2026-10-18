@@ -1,3 +1,4 @@
+import '../android/android_project.dart';
 import '../core/exceptions.dart';
 import '../core/flutter_project.dart';
 import 'add_command.dart';
@@ -13,6 +14,7 @@ class RemoveCommand extends EasyFlavorCommand {
       help: 'Do not ask for confirmation.',
       negatable: false,
     );
+    addSafetyOptions(argParser);
   }
 
   @override
@@ -39,6 +41,13 @@ class RemoveCommand extends EasyFlavorCommand {
     if (current.flavors.length == 1) {
       throw UsageError('Cannot remove the only flavor.');
     }
+    final gradle = readAppGradleFile(contextFor(root));
+    if (gradle != null && gradle.unmanagedFlavors.contains(flavor)) {
+      throw UsageError(
+        '"$flavor" is declared in your own productFlavors in ${gradle.path}.',
+        hint: 'Delete it there first, then run `easy_flavor remove $flavor`.',
+      );
+    }
 
     final config = current.copyWith(
       flavors: [
@@ -51,6 +60,7 @@ class RemoveCommand extends EasyFlavorCommand {
       config: config,
       previous: current,
       confirm: !args.flag('yes'),
+      force: args.flag('force'),
     );
   }
 }

@@ -4,6 +4,7 @@ import '../dart_code/dart_code_generator.dart';
 import '../firebase/firebase_generator.dart';
 import '../ide/ide_generator.dart';
 import '../ios/ios_generator.dart';
+import 'backup.dart';
 import 'change_set.dart';
 import 'generator.dart';
 import 'project_context.dart';
@@ -46,5 +47,15 @@ Future<ChangeSet> planChanges({
     config.toYaml(),
     reason: 'flavor configuration',
   );
+  final gitignore = changes.read('.gitignore');
+  if (gitignore != null &&
+      !gitignore.split('\n').any((l) => l.trim() == '$backupDirName/')) {
+    final sep = gitignore.isEmpty || gitignore.endsWith('\n') ? '' : '\n';
+    changes.write(
+      '.gitignore',
+      '$gitignore$sep\n# easy_flavor backups\n$backupDirName/\n',
+      reason: 'ignore easy_flavor backups',
+    );
+  }
   return changes;
 }

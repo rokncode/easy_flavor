@@ -7,6 +7,7 @@ import 'commands/create_command.dart';
 import 'commands/doctor_command.dart';
 import 'commands/init_command.dart';
 import 'commands/remove_command.dart';
+import 'commands/restore_command.dart';
 import 'core/exceptions.dart';
 import 'core/process_runner.dart';
 import 'version.dart';
@@ -55,6 +56,7 @@ class EasyFlavorCommandRunner extends CommandRunner<int> {
       AddCommand(logger: _logger, processRunner: processRunner),
       RemoveCommand(logger: _logger, processRunner: processRunner),
       DoctorCommand(logger: _logger, processRunner: processRunner),
+      RestoreCommand(logger: _logger, processRunner: processRunner),
     ]) {
       addCommand(command);
     }

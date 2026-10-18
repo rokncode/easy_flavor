@@ -12,7 +12,11 @@ class FakeProcessRunner extends ProcessRunner {
     this.missing = const {},
     this.loggedIn = true,
     this.onRun,
+    this.gitPorcelain = '',
   });
+
+  /// `git status --porcelain` output; null means "not a git repository".
+  final String? gitPorcelain;
 
   /// Executables reported as not installed.
   final Set<String> missing;
@@ -28,6 +32,11 @@ class FakeProcessRunner extends ProcessRunner {
     String? workingDirectory,
   }) async {
     _handle(executable, arguments, workingDirectory);
+    if (executable == 'git') {
+      return gitPorcelain == null
+          ? ProcessResult(0, 128, '', 'fatal: not a git repository')
+          : ProcessResult(0, 0, gitPorcelain, '');
+    }
     if (executable == 'firebase' && arguments.first == 'login:list') {
       return ProcessResult(
         0,

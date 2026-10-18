@@ -26,4 +26,15 @@
 - `lib/main.dart`'s `main()` delegates to the default flavor's entry point.
 - `doctor` warns when the iOS deployment target is below what the installed
   Xcode supports.
+- Safety for existing projects: git status check (uncommitted changes need
+  confirmation or `--force`), backups of every touched file in
+  `.easy_flavor_backup/<timestamp>/` (added to `.gitignore`), and
+  `easy_flavor restore [<backup>]` / `restore --list` to undo a run.
+- `init`, `add` and `remove` now write changes.
+- `init --merge` adopts flavors the project already declares: their names
+  and ids are imported into easy_flavor.yaml (`merge_existing: true`),
+  Gradle flavors are configured on top of the project's own
+  `productFlavors` (same dimension, custom settings kept), and existing
+  Xcode configurations get the flavor values directly.
+- `--dry-run --verbose` prints a unified diff of every file.
 - `create` runs `flutter create` and writes the flavor setup.

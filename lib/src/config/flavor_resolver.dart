@@ -75,6 +75,7 @@ EasyFlavorConfig resolveConfig({
     flavors: flavors,
     firebase: cli.firebase ?? file.firebase ?? false,
     ide: cli.ide ?? file.ide ?? IdeTarget.values,
+    mergeExisting: cli.mergeExisting ?? file.mergeExisting ?? false,
   );
   validateConfig(config);
   return config;

@@ -41,6 +41,7 @@ abstract class EasyFlavorCommand extends Command<int> {
     logger: logger,
     dryRun: dryRun,
     interactive: interactive,
+    processRunner: processRunner,
   );
 
   /// Exactly one positional argument, e.g. `add <flavor>`.
@@ -49,6 +50,17 @@ abstract class EasyFlavorCommand extends Command<int> {
     if (rest.length != 1) usageException('Expected exactly one $label.');
     return rest.single;
   }
+}
+
+/// `--force`, for commands that change an existing project.
+void addSafetyOptions(ArgParser parser) {
+  parser.addFlag(
+    'force',
+    help:
+        'Proceed even if git has uncommitted changes (needed on CI when the '
+        'tree is dirty).',
+    negatable: false,
+  );
 }
 
 /// Adds the options that describe flavors (used by `create` and `init`).

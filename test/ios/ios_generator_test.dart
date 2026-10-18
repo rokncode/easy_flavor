@@ -196,4 +196,34 @@ void main() {
     expect(messages, contains('Xcode configuration Debug-dev is missing.'));
     expect(messages, contains('Xcode scheme "dev" is missing.'));
   });
+
+  test('merge mode adopts existing configurations without xcconfigs', () async {
+    final dir = copyFixture('fresh_kts');
+    final xcode = project(dir);
+    final list = xcode.appTarget.listId;
+    final ref = xcode.baseConfigurationRef('Debug');
+    for (final b in ['Debug', 'Release', 'Profile']) {
+      xcode.copyConfiguration(list, xcode.configsByName(list)[b]!, '$b-dev');
+    }
+    File('${dir.path}/$pbxprojFile').writeAsStringSync(xcode.encode());
+
+    final config = configOf(['dev', 'prod']).copyWith(mergeExisting: true);
+    await applyAndExpectIdempotent(dir, config, generators: ios);
+    final after = project(dir);
+    final configs = after.configsByName(after.appTarget.listId);
+    final devDebug = configs['Debug-dev']!;
+    expect(
+      after.config(devDebug)['baseConfigurationReference'],
+      ref,
+      reason: 'own xcconfig kept',
+    );
+    expect(
+      after.buildSettings(devDebug)['PRODUCT_BUNDLE_IDENTIFIER'],
+      'com.acme.app.dev',
+    );
+    expect(after.buildSettings(devDebug)['EASY_FLAVOR'], 'dev');
+    expect(exists(dir, 'ios/Flutter/Debug-dev.xcconfig'), isFalse);
+    expect(exists(dir, 'ios/Flutter/Debug-prod.xcconfig'), isTrue);
+    expect(const IosGenerator().check(contextFor(dir), config), isEmpty);
+  });
 }

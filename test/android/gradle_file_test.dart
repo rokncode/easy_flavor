@@ -193,4 +193,72 @@ void main() {
       throwsA(isA<ProjectError>()),
     );
   });
+
+  test(
+    'merge mode (KTS): configures existing flavors after the user block',
+    () {
+      const src = '''
+android {
+    defaultConfig {
+        applicationId = "com.a"
+    }
+    flavorDimensions += "env"
+    productFlavors {
+        create("dev") {
+            dimension = "env"
+            applicationIdSuffix = ".dev"
+        }
+    }
+}
+''';
+      final gradle = GradleFile(kotlinBuildFile, src);
+      expect(gradle.existingFlavors.single.applicationId, 'com.a.dev');
+      expect(gradle.existingDimensions, {'env'});
+      final out = gradle.withFlavors(
+        flavors,
+        AppNameSource.resValue,
+        merge: true,
+      );
+      expect(
+        out,
+        contains('''
+    }
+
+    // easy_flavor:begin (generated from easy_flavor.yaml; edits here are overwritten)
+    buildFeatures {
+        resValues = true
+    }
+    productFlavors {
+        getByName("dev") {
+            dimension = "env"
+            applicationId = "com.a.dev"
+            applicationIdSuffix = null
+            resValue("string", "app_name", "App Dev")
+        }
+        create("prod") {
+            dimension = "env"
+            applicationId = "com.a"
+'''),
+      );
+      final again = GradleFile(kotlinBuildFile, out);
+      expect(again.unmanagedFlavors, ['dev']);
+      expect(again.managedFlavors, ['dev', 'prod']);
+      expect(
+        again.withFlavors(flavors, AppNameSource.resValue, merge: true),
+        out,
+      );
+    },
+  );
+
+  test('merge mode refuses several dimensions', () {
+    const src =
+        'android {\n  flavorDimensions "env", "store"\n  productFlavors {\n    dev { dimension "env" }\n  }\n}\n';
+    expect(
+      () => GradleFile(
+        groovyBuildFile,
+        src,
+      ).withFlavors(flavors, AppNameSource.resValue, merge: true),
+      throwsA(isA<ProjectError>()),
+    );
+  });
 }

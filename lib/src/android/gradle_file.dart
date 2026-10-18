@@ -91,9 +91,7 @@ class GradleFile {
   /// Flavors declared in a `productFlavors` block that easy_flavor does not
   /// manage.
   List<String> get unmanagedFlavors => [
-    for (final pf in _productFlavorBlocks())
-      if (!_isManaged(pf.start))
-        for (final f in pf.children) ?_flavorName(f),
+    for (final f in existingFlavors) f.name,
   ];
 
   /// Flavors in the easy_flavor-managed block.
@@ -113,9 +111,13 @@ class GradleFile {
 
   /// `dev { }` (Groovy), `create("dev") { }` / `register("dev")` (Kotlin).
   static String? _flavorName(GradleBlock b) {
-    if ((b.name == 'create' ||
-            b.name == 'register' ||
-            b.name == 'maybeCreate') &&
+    if (const {
+          'create',
+          'register',
+          'maybeCreate',
+          'getByName',
+          'named',
+        }.contains(b.name) &&
         b.args != null) {
       return unquoteGradleString(b.args!);
     }
@@ -125,41 +127,136 @@ class GradleFile {
     return null;
   }
 
-  /// Returns the source with the managed block set to [flavors]. Replaces an
-  /// existing managed block in place, otherwise inserts it after
-  /// `defaultConfig { }` (or at the end of `android { }`).
-  String withFlavors(List<FlavorSpec> flavors, AppNameSource appName) {
-    final unmanaged = unmanagedFlavors;
-    if (unmanaged.isNotEmpty) {
+  /// Flavors declared outside the managed block, with the values
+  /// easy_flavor can read from them (for `init --merge`).
+  List<ExistingAndroidFlavor> get existingFlavors {
+    final defaultId = applicationId;
+    return [
+      for (final pf in _productFlavorBlocks())
+        if (!_isManaged(pf.start))
+          for (final f in pf.children)
+            if (_flavorName(f) case final name?)
+              _readExisting(name, f.body(source), defaultId),
+    ];
+  }
+
+  static ExistingAndroidFlavor _readExisting(
+    String name,
+    String body,
+    String? defaultId,
+  ) {
+    String? literal(String key) {
+      final m = RegExp(
+        '^\\s*$key\\s*=?\\s*(["\'][^"\'\\n]*["\'])\\s*\$',
+        multiLine: true,
+      ).firstMatch(body);
+      return m == null ? null : unquoteGradleString(m.group(1)!);
+    }
+
+    final id = literal('applicationId');
+    final suffix = literal('applicationIdSuffix');
+    final appName = RegExp(
+      r"""resValue\s*\(?\s*["']string["']\s*,\s*["']app_name["']\s*,\s*(["'][^"'\n]*["'])""",
+    ).firstMatch(body);
+    return ExistingAndroidFlavor(
+      name: name,
+      applicationId:
+          id ?? (defaultId == null ? null : '$defaultId${suffix ?? ''}'),
+      appName: appName == null ? null : unquoteGradleString(appName.group(1)!),
+      dimension: literal('dimension'),
+    );
+  }
+
+  /// Flavor dimensions declared outside the managed block.
+  Set<String> get existingDimensions {
+    final dims = {
+      for (final f in existingFlavors)
+        if (f.dimension != null) f.dimension!,
+    };
+    final a = android;
+    if (a == null) return dims;
+    final body = a.body(source);
+    final offset = a.open + 1;
+    for (final m in RegExp(r'flavorDimensions[^\n]*').allMatches(body)) {
+      if (_isManaged(offset + m.start)) continue;
+      for (final q in RegExp(r"""["']([^"']+)["']""").allMatches(m.group(0)!)) {
+        dims.add(q.group(1)!);
+      }
+    }
+    return dims;
+  }
+
+  /// Returns the source with the managed block set to [flavors].
+  ///
+  /// Normally the block is inserted after `defaultConfig { }` (or replaced
+  /// in place) and unmanaged flavors are an error. With [merge], flavors the
+  /// project already declares are configured on top of its own
+  /// `productFlavors` block, in its flavor dimension.
+  String withFlavors(
+    List<FlavorSpec> flavors,
+    AppNameSource appName, {
+    bool merge = false,
+  }) {
+    final existing = existingFlavors;
+    if (existing.isNotEmpty && !merge) {
       throw ProjectError(
-        '$path already declares productFlavors (${unmanaged.join(', ')}) '
-        'that easy_flavor does not manage.',
+        '$path already declares productFlavors '
+        '(${existing.map((f) => f.name).join(', ')}) that easy_flavor does not '
+        'manage.',
         hint:
             'Remove them, or re-run `easy_flavor init --merge` to adopt them.',
       );
     }
+    String? dimension;
+    if (merge && existing.isNotEmpty) {
+      final dims = existingDimensions;
+      if (dims.length > 1) {
+        throw ProjectError(
+          '$path uses several flavor dimensions (${dims.join(', ')}).',
+          hint:
+              'easy_flavor can only merge with a single dimension; Flutter '
+              'flavors map to one dimension.',
+        );
+      }
+      dimension = dims.isEmpty ? null : dims.single;
+    }
+    String render(String indent) => renderFlavorBlock(
+      flavors,
+      dsl,
+      appName,
+      indent: indent,
+      dimension: dimension,
+      adopted: {for (final f in existing) f.name},
+    );
 
     final range = managedRange;
     if (range != null) {
-      final indent = _indentOfLine(range.$1);
-      final block = renderFlavorBlock(flavors, dsl, appName, indent: indent);
-      return source.replaceRange(range.$1, range.$2, block);
+      return source.replaceRange(
+        range.$1,
+        range.$2,
+        render(_indentOfLine(range.$1)),
+      );
     }
 
     final androidBlock = _requireAndroid;
-    final anchor = androidBlock.child('defaultConfig');
-    final indent = anchor != null
-        ? _indentOfLine(source.lastIndexOf('\n', anchor.start) + 1)
-        : '${_indentOfLine(source.lastIndexOf('\n', androidBlock.start) + 1)}    ';
-    final block = renderFlavorBlock(flavors, dsl, appName, indent: indent);
-
+    // Merging: after the project's own productFlavors, so its flavors exist
+    // and our settings win.
+    final anchor = existing.isNotEmpty
+        ? _productFlavorBlocks().last
+        : androidBlock.child('defaultConfig');
     if (anchor != null) {
-      // After the line holding defaultConfig's closing brace.
+      final block = render(
+        _indentOfLine(source.lastIndexOf('\n', anchor.start) + 1),
+      );
+      // After the line holding the anchor's closing brace.
       var at = source.indexOf('\n', anchor.close);
       at = at == -1 ? source.length : at + 1;
       return source.replaceRange(at, at, '\n$block');
     }
     // Before the line holding android's closing brace.
+    final block = render(
+      '${_indentOfLine(source.lastIndexOf('\n', androidBlock.start) + 1)}    ',
+    );
     final at = source.lastIndexOf('\n', androidBlock.close) + 1;
     return source.replaceRange(at, at, '\n$block');
   }
@@ -175,33 +272,47 @@ class GradleFile {
 
 /// Renders the managed block, each line prefixed with [indent], ending with
 /// a newline.
+///
+/// With [dimension] (merge mode), the project's own flavor dimension is used
+/// and not declared again; flavors in [adopted] already exist in the
+/// project's `productFlavors` and are configured rather than created, with
+/// any `applicationIdSuffix` cleared so `applicationId` is exact.
 String renderFlavorBlock(
   List<FlavorSpec> flavors,
   GradleDsl dsl,
   AppNameSource appName, {
   String indent = '    ',
+  String? dimension,
+  Set<String> adopted = const {},
 }) {
   final kts = dsl == GradleDsl.kotlin;
+  final merging = dimension != null || adopted.isNotEmpty;
+  final dim = dimension ?? flavorDimension;
+  String set(String key, String value) => kts ? '$key = $value' : '$key $value';
   final lines = <String>[
     '$beginMarker (generated from easy_flavor.yaml; edits here are overwritten)',
     // AGP 9 disables resValue by default.
     if (appName == AppNameSource.resValue) ...[
       'buildFeatures {',
-      kts ? '    resValues = true' : '    resValues true',
+      '    ${set('resValues', 'true')}',
       '}',
     ],
-    kts
-        ? 'flavorDimensions += "$flavorDimension"'
-        : 'flavorDimensions "$flavorDimension"',
+    if (!merging)
+      set(
+        'flavorDimensions',
+        '"$flavorDimension"',
+      ).replaceFirst('flavorDimensions = ', 'flavorDimensions += '),
     'productFlavors {',
     for (final f in flavors) ...[
-      kts ? '    create("${f.name}") {' : '    ${f.name} {',
-      kts
-          ? '        dimension = "$flavorDimension"'
-          : '        dimension "$flavorDimension"',
-      kts
-          ? '        applicationId = "${f.androidId}"'
-          : '        applicationId "${f.androidId}"',
+      if (!kts)
+        '    ${f.name} {'
+      else if (adopted.contains(f.name))
+        '    getByName("${f.name}") {'
+      else
+        '    create("${f.name}") {',
+      '        ${set('dimension', '"$dim"')}',
+      '        ${set('applicationId', '"${f.androidId}"')}',
+      if (adopted.contains(f.name)) '        applicationIdSuffix = null',
       if (appName == AppNameSource.resValue)
         kts
             ? '        resValue("string", "app_name", "${gradleResValueString(f.appName)}")'
@@ -212,6 +323,23 @@ String renderFlavorBlock(
     endMarker,
   ];
   return '${lines.map((l) => '$indent$l').join('\n')}\n';
+}
+
+/// A flavor declared in the project's own `productFlavors` block.
+class ExistingAndroidFlavor {
+  ExistingAndroidFlavor({
+    required this.name,
+    this.applicationId,
+    this.appName,
+    this.dimension,
+  });
+
+  final String name;
+
+  /// Effective id: its `applicationId`, or defaultConfig's plus its suffix.
+  final String? applicationId;
+  final String? appName;
+  final String? dimension;
 }
 
 /// Escapes [value] for a double-quoted Gradle string (Groovy and Kotlin)

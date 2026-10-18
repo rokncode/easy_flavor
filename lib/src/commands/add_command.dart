@@ -29,6 +29,7 @@ class AddCommand extends EasyFlavorCommand {
         'firebase-project',
         help: 'Firebase project id for this flavor.',
       );
+    addSafetyOptions(argParser);
   }
 
   @override
@@ -74,6 +75,7 @@ class AddCommand extends EasyFlavorCommand {
       context: contextFor(root),
       config: config,
       previous: current,
+      force: args.flag('force'),
     );
   }
 }

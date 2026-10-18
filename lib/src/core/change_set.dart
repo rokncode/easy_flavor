@@ -33,6 +33,7 @@ class ExternalCommand {
     this.arguments, {
     required this.reason,
     this.preserve = const [],
+    this.mayModify = const [],
   });
 
   final String executable;
@@ -42,6 +43,10 @@ class ExternalCommand {
   /// Files the tool modifies that easy_flavor manages itself; they are
   /// restored to their planned content after the command runs.
   final List<String> preserve;
+
+  /// Other files the tool may create or change; they are backed up before
+  /// it runs.
+  final List<String> mayModify;
 
   String get display => [executable, ...arguments.map(_shellQuote)].join(' ');
 

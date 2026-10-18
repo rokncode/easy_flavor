@@ -28,15 +28,17 @@ class IosGenerator implements Generator, Checker {
     final xcode = XcodeProject.parse(changes.read(pbxprojFile)!);
     final app = xcode.appTarget;
 
-    final managed = managedIosFlavors(context, read: changes.read)
-      ..addAll(request.previous?.flavorNames ?? const []);
+    // Flavors with easy_flavor xcconfigs. Configurations of other flavors
+    // belong to the project (adopted in merge mode).
+    final managedOnDisk = managedIosFlavors(context, read: changes.read);
     final appConfigs = xcode.configsByName(app.listId);
     final unmanaged = {
       for (final name in appConfigs.keys)
         if (flavorConfigPattern.firstMatch(name)?.group(2) case final f?)
-          if (!managed.contains(f)) f,
+          if (!managedOnDisk.contains(f)) f,
     };
-    if (unmanaged.isNotEmpty) {
+    final managed = {...managedOnDisk, ...?request.previous?.flavorNames};
+    if (unmanaged.isNotEmpty && !config.mergeExisting) {
       throw ProjectError(
         'The Xcode project already has flavor configurations '
         '(${unmanaged.join(', ')}) that easy_flavor does not manage.',
@@ -61,7 +63,14 @@ class IosGenerator implements Generator, Checker {
     }
 
     for (final f in config.flavors) {
-      _addFlavor(xcode, changes, app, bases, f);
+      _addFlavor(
+        xcode,
+        changes,
+        app,
+        bases,
+        f,
+        adopted: unmanaged.contains(f.name),
+      );
     }
 
     _planInfoPlist(xcode, changes, app, config);
@@ -76,10 +85,26 @@ class IosGenerator implements Generator, Checker {
     ChangeSet changes,
     ConfigOwner app,
     List<String> bases,
-    FlavorSpec flavor,
-  ) {
+    FlavorSpec flavor, {
+    bool adopted = false,
+  }) {
     for (final base in bases) {
       final configName = '$base-${flavor.name}';
+      final existingId = xcode.configsByName(app.listId)[configName];
+      if (adopted && existingId != null) {
+        // The project's own configuration (merge mode): keep its xcconfig
+        // and set the flavor values directly.
+        xcode
+          ..setBuildSetting(
+            existingId,
+            'PRODUCT_BUNDLE_IDENTIFIER',
+            flavor.iosBundleId,
+          )
+          ..setBuildSetting(existingId, displayNameSetting, flavor.appName)
+          ..setBuildSetting(existingId, flavorSetting, flavor.name);
+        _copyToOtherOwners(xcode, app, base, configName);
+        continue;
+      }
       changes.write(
         xcconfigPath(base, flavor.name),
         renderXcconfig(base, flavor, podsTarget: app.name),
@@ -116,6 +141,23 @@ class IosGenerator implements Generator, Checker {
             ..remove(flavorSetting);
           _moveBaseConfigurationRefFirst(c);
         }
+      }
+    }
+  }
+
+  /// Ensures the project and other targets also have [configName].
+  void _copyToOtherOwners(
+    XcodeProject xcode,
+    ConfigOwner app,
+    String base,
+    String configName,
+  ) {
+    for (final owner in xcode.configOwners) {
+      if (owner.id == app.id) continue;
+      final configs = xcode.configsByName(owner.listId);
+      final from = configs[base];
+      if (from != null && !configs.containsKey(configName)) {
+        xcode.copyConfiguration(owner.listId, from, configName);
       }
     }
   }
@@ -253,7 +295,14 @@ class IosGenerator implements Generator, Checker {
             ),
           );
         }
-        if (!context.exists(xcconfigPath(base, f))) {
+        final adoptedOk =
+            config.mergeExisting &&
+            appConfigs[name] != null &&
+            xcode.buildSettings(
+                  appConfigs[name]!,
+                )['PRODUCT_BUNDLE_IDENTIFIER'] ==
+                config.flavor(f)!.iosBundleId;
+        if (!adoptedOk && !context.exists(xcconfigPath(base, f))) {
           issues.add(
             Issue(
               Severity.error,

@@ -199,14 +199,128 @@ void main() {
       expect(r.output, contains('already has flavors: dev, prod'));
     });
 
-    test('does not write existing projects yet', () async {
+    test('writes, backs up, is idempotent, and restore undoes it', () async {
       final dir = copyFixture('fresh_kts');
+      File(p.join(dir.path, '.gitignore')).writeAsStringSync('build/\n');
+      final before = {
+        for (final f in dir.listSync(recursive: true).whereType<File>())
+          p.relative(f.path, from: dir.path): f.readAsStringSync(),
+      };
+
       final r = await runCli(['init', '-C', dir.path, '--flavors', 'dev,prod']);
       expect(r.exitCode, 0, reason: r.output);
       expect(
         File(p.join(dir.path, 'lib', 'main_dev.dart')).existsSync(),
+        isTrue,
+      );
+      expect(r.stdout, contains('undo with `easy_flavor restore'));
+      expect(
+        File(p.join(dir.path, '.gitignore')).readAsStringSync(),
+        contains('.easy_flavor_backup/'),
+      );
+
+      final again = await runCli(['init', '-C', dir.path]);
+      expect(again.exitCode, 0, reason: again.output);
+      expect(again.stdout, contains('No changes needed'));
+
+      final restored = await runCli(['restore', '-C', dir.path]);
+      expect(restored.exitCode, 0, reason: restored.output);
+      final after = {
+        for (final f in dir.listSync(recursive: true).whereType<File>())
+          if (!p
+              .split(p.relative(f.path, from: dir.path))
+              .contains('.easy_flavor_backup'))
+            p.relative(f.path, from: dir.path): f.readAsStringSync(),
+      };
+      expect(after, before);
+    });
+
+    test('stops on uncommitted changes unless --force', () async {
+      final dir = copyFixture('fresh_kts');
+      final dirty = FakeProcessRunner(gitPorcelain: ' M lib/main.dart\n');
+      final r = await runCli([
+        'init',
+        '-C',
+        dir.path,
+        '--flavors',
+        'dev,prod',
+      ], processRunner: dirty);
+      expect(r.exitCode, isNot(0));
+      expect(r.output, contains('1 uncommitted change'));
+      expect(r.output, contains('--force'));
+      expect(
+        File(p.join(dir.path, 'lib', 'main_dev.dart')).existsSync(),
         isFalse,
       );
+
+      final forced = await runCli([
+        'init',
+        '-C',
+        dir.path,
+        '--flavors',
+        'dev,prod',
+        '--force',
+      ], processRunner: dirty);
+      expect(forced.exitCode, 0, reason: forced.output);
+    });
+
+    test('warns outside git but proceeds', () async {
+      final dir = copyFixture('fresh_kts');
+      final r = await runCli([
+        'init',
+        '-C',
+        dir.path,
+        '--flavors',
+        'dev',
+      ], processRunner: FakeProcessRunner(gitPorcelain: null));
+      expect(r.exitCode, 0, reason: r.output);
+      expect(r.output, contains('not a git repository'));
+    });
+
+    test('--dry-run --verbose prints diffs', () async {
+      final dir = copyFixture('fresh_kts');
+      final r = await runCli([
+        'init', '-C', dir.path, '--flavors', 'dev,prod', '--dry-run', '-v', //
+      ]);
+      expect(r.exitCode, 0, reason: r.output);
+      expect(r.stdout, contains('--- a/lib/main.dart'));
+      expect(r.stdout, contains('-void main() {'));
+      expect(r.stdout, contains('+void runMainApp() {'));
+    });
+
+    test('--merge adopts existing Gradle flavors', () async {
+      final dir = copyFixture('existing_flavors');
+      final r = await runCli(['init', '-C', dir.path, '--merge']);
+      expect(r.exitCode, 0, reason: r.output);
+      expect(
+        r.stdout,
+        matches(RegExp(r'dev\s+\S.*com\.legacy\.legacy_app\.dev')),
+      );
+      final yaml = File(
+        p.join(dir.path, 'easy_flavor.yaml'),
+      ).readAsStringSync();
+      expect(yaml, contains('merge_existing: true'));
+      final gradle = File(
+        p.join(dir.path, 'android/app/build.gradle'),
+      ).readAsStringSync();
+      expect(
+        gradle,
+        contains('buildConfigField "String", "BANNER"'),
+        reason: 'user lines kept',
+      );
+      expect(
+        gradle.indexOf('easy_flavor:begin'),
+        greaterThan(gradle.indexOf('productFlavors {')),
+      );
+      expect(gradle, contains('dimension "env"'));
+      expect(gradle, isNot(contains('flavorDimensions "flavor"')));
+
+      final again = await runCli(['init', '-C', dir.path]);
+      expect(again.stdout, contains('No changes needed'), reason: again.output);
+
+      final remove = await runCli(['remove', 'dev', '-C', dir.path, '-y']);
+      expect(remove.exitCode, ExitCode.usage.code);
+      expect(remove.output, contains('declared in your own productFlavors'));
     });
 
     test('fails outside a Flutter project', () async {

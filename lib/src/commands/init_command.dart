@@ -3,6 +3,7 @@ import '../config/config_loader.dart';
 import '../config/easy_flavor_config.dart';
 import '../config/flavor_resolver.dart';
 import '../core/exceptions.dart';
+import '../core/existing_flavors.dart';
 import '../core/flutter_project.dart';
 import '../ios/ios_project.dart';
 import 'base_command.dart';
@@ -12,19 +13,14 @@ import 'setup_flow.dart';
 class InitCommand extends EasyFlavorCommand {
   InitCommand({required super.logger, super.processRunner}) {
     addFlavorOptions(argParser);
-    argParser
-      ..addFlag(
-        'merge',
-        help:
-            'If the project already has flavors, merge with them instead of aborting '
-            '(asked interactively when omitted).',
-        defaultsTo: null,
-      )
-      ..addFlag(
-        'force',
-        help: 'Proceed even if git has uncommitted changes.',
-        negatable: false,
-      );
+    argParser.addFlag(
+      'merge',
+      help:
+          'If the project already has flavors, merge with them instead of aborting '
+          '(asked interactively when omitted).',
+      defaultsTo: null,
+    );
+    addSafetyOptions(argParser);
   }
 
   @override
@@ -40,28 +36,34 @@ class InitCommand extends EasyFlavorCommand {
     final file = loadConfigFile(root);
     var cli = flavorOverridesFrom(args);
 
-    final existing = {
-      ...detectExistingAndroidFlavors(context),
-      ...detectExistingIosFlavors(context),
-    };
-    if (existing.isNotEmpty && file.isEmpty) {
-      // TODO(step 5): import existing flavors into the plan when merging.
-      final merge = args.wasParsed('merge')
-          ? args.flag('merge')
-          : interactive &&
-                logger.confirm(
-                  'Found existing flavors (${existing.join(', ')}). Merge with them?',
-                );
-      if (!merge) {
-        throw EasyFlavorException(
-          'Project already has flavors: ${existing.join(', ')}.',
-          hint:
-              'Re-run with --merge to keep them and add the new setup on top.',
-        );
+    // Flavors the project already has outside easy_flavor.
+    final detected = detectExistingFlavorConfig(context);
+    var base = file;
+    if (detected.flavors.isNotEmpty) {
+      if (file.mergeExisting != true) {
+        final names = detected.flavors.map((f) => f.name).join(', ');
+        final merge = args.wasParsed('merge')
+            ? args.flag('merge')
+            : interactive &&
+                  logger.confirm(
+                    'This project already has flavors ($names). Merge with '
+                    'them (keep your Gradle/Xcode setup and configure them '
+                    'on top)?',
+                  );
+        if (!merge) {
+          throw EasyFlavorException(
+            'Project already has flavors: $names.',
+            hint: 'Re-run with --merge to adopt them, or remove them first.',
+          );
+        }
       }
+      base = layerConfig(
+        layerConfig(detected, file),
+        const PartialConfig(mergeExisting: true),
+      );
     }
 
-    if (!cli.hasFlavorList && file.flavors.isEmpty) {
+    if (!cli.hasFlavorList && base.flavors.isEmpty) {
       if (!interactive) {
         throw UsageError(
           'No flavors specified.',
@@ -87,7 +89,7 @@ class InitCommand extends EasyFlavorCommand {
     final iosId = detectBundleIdentifier(context);
     final fallbackId = 'com.example.${bundleSegmentFromPackage(packageName)}';
     final config = resolveConfig(
-      file: file,
+      file: base,
       cli: cli,
       baseId: androidId ?? iosId ?? fallbackId,
       iosBaseId: iosId ?? iosBundleIdFromAndroid(androidId ?? fallbackId),
@@ -105,6 +107,7 @@ class InitCommand extends EasyFlavorCommand {
       config: config,
       previous: loadAppliedConfig(root),
       confirm: true,
+      force: args.flag('force'),
     );
   }
 }

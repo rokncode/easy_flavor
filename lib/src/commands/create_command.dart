@@ -122,7 +122,7 @@ class CreateCommand extends EasyFlavorCommand {
     return runSetup(
       context: contextFor(target),
       config: config,
-      allowWrite: true,
+      freshProject: true,
     );
   }
 }

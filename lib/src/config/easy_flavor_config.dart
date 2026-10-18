@@ -11,6 +11,7 @@ class EasyFlavorConfig {
     required this.flavors,
     this.firebase = false,
     this.ide = IdeTarget.values,
+    this.mergeExisting = false,
   });
 
   static const fileName = 'easy_flavor.yaml';
@@ -22,6 +23,11 @@ class EasyFlavorConfig {
 
   /// IDE run configurations to generate.
   final List<IdeTarget> ide;
+
+  /// The project had its own flavor setup when easy_flavor was added
+  /// (`init --merge`); easy_flavor configures those flavors on top of the
+  /// existing Gradle/Xcode setup instead of refusing to touch them.
+  final bool mergeExisting;
 
   List<String> get flavorNames => [for (final f in flavors) f.name];
 
@@ -36,10 +42,12 @@ class EasyFlavorConfig {
     List<FlavorSpec>? flavors,
     bool? firebase,
     List<IdeTarget>? ide,
+    bool? mergeExisting,
   }) => EasyFlavorConfig(
     flavors: flavors ?? this.flavors,
     firebase: firebase ?? this.firebase,
     ide: ide ?? this.ide,
+    mergeExisting: mergeExisting ?? this.mergeExisting,
   );
 
   /// Parses `easy_flavor.yaml` content. Missing per-flavor fields are allowed
@@ -100,10 +108,16 @@ class EasyFlavorConfig {
       ide = [for (final v in ideNode) IdeTarget.parse(v.toString())];
     }
 
+    final merge = doc['merge_existing'];
+    if (merge != null && merge is! bool) {
+      throw UsageError('$fileName: "merge_existing" must be true or false.');
+    }
+
     return PartialConfig(
       flavors: flavors,
       firebase: firebase as bool?,
       ide: ide,
+      mergeExisting: merge as bool?,
       hasFlavorList: flavors.isNotEmpty,
     );
   }
@@ -122,6 +136,7 @@ class EasyFlavorConfig {
     }
     b.writeln('firebase: $firebase');
     b.writeln('ide: [${ide.map((t) => t.id).join(', ')}]');
+    if (mergeExisting) b.writeln('merge_existing: true');
     return b.toString();
   }
 
@@ -175,17 +190,23 @@ class PartialConfig {
     this.firebase,
     this.hasFlavorList = false,
     this.ide,
+    this.mergeExisting,
   });
 
   final List<PartialFlavor> flavors;
   final bool? firebase;
   final List<IdeTarget>? ide;
+  final bool? mergeExisting;
 
   /// True when [flavors] is an authoritative list (`--flavors` was passed),
   /// rather than just per-flavor overrides.
   final bool hasFlavorList;
 
-  bool get isEmpty => flavors.isEmpty && firebase == null && ide == null;
+  bool get isEmpty =>
+      flavors.isEmpty &&
+      firebase == null &&
+      ide == null &&
+      mergeExisting == null;
 }
 
 enum IdeTarget {
