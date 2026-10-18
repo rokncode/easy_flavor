@@ -10,4 +10,9 @@
   `resValue` app names (or per-flavor `strings.xml` when `app_name` already
   exists), `@string/app_name` manifest label, `src/<flavor>/` folders.
 - IDE: VS Code `launch.json` entries and Android Studio `.run/` configs.
+- iOS: Dart `project.pbxproj` parser/writer (byte-identical round trips),
+  `Debug/Release/Profile-<flavor>` configurations in every configuration
+  list, per-configuration xcconfig files (bundle id, display name, CocoaPods
+  include), shared schemes per flavor, `CFBundleDisplayName =
+  $(APP_DISPLAY_NAME)`, and the Podfile configuration map.
 - `create` runs `flutter create` and writes the flavor setup.

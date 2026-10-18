@@ -5,3 +5,12 @@ pubspec.lock
 .DS_Store
 test/fixtures/**/local.properties
 test/fixtures/**/GeneratedPluginRegistrant.*
+# Files Flutter tooling/IDEs generate inside fixture projects
+test/fixtures/**/.dart_tool/
+test/fixtures/**/.flutter-plugins*
+test/fixtures/**/pubspec.lock
+test/fixtures/**/ios/Flutter/Generated.xcconfig
+test/fixtures/**/ios/Flutter/flutter_export_environment.sh
+test/fixtures/**/ios/Flutter/ephemeral/
+test/fixtures/**/.idea/
+test/fixtures/**/*.iml
