@@ -101,3 +101,15 @@ String titleCaseFromPackage(String packageName) => packageName
 /// does for iOS, but also valid for Android).
 String bundleSegmentFromPackage(String packageName) =>
     packageName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toLowerCase();
+
+/// Converts an Android applicationId to a valid iOS bundle id the way
+/// `flutter create` does: `com.acme.my_app` -> `com.acme.myApp`.
+String iosBundleIdFromAndroid(String androidId) => androidId
+    .split('.')
+    .map((segment) {
+      final parts = segment.split('_').where((s) => s.isNotEmpty).toList();
+      if (parts.isEmpty) return segment;
+      return parts.first +
+          parts.skip(1).map((s) => s[0].toUpperCase() + s.substring(1)).join();
+    })
+    .join('.');

@@ -79,30 +79,50 @@ class CreateCommand extends EasyFlavorCommand {
       baseAppName: titleCaseFromPackage(projectName),
     );
 
-    final flutterArgs = [
+    final platforms = args.multiOption('platforms');
+    List<String> flutterCreateArgs(String dir) => [
       'create',
       '--org',
       org,
       '--project-name',
       projectName,
       '--platforms',
-      args.multiOption('platforms').join(','),
+      platforms.join(','),
       if (args.option('description') case final d?) ...['--description', d],
-      target,
+      dir,
     ];
-    logger.info(
-      '${lightCyan.wrap('Step 1/2:')} flutter ${flutterArgs.join(' ')}',
-    );
+
     if (dryRun) {
-      logger.info(
-        'Dry run: skipping flutter create; showing flavor plan for an empty project.',
-      );
-    } else {
-      // TODO(step 2): run flutter create, then plan against the new project.
-      logger.warn('flutter create is not wired up yet (scaffold build).');
+      // Plan against a throwaway project so the preview shows real changes.
+      logger.info('Would run: flutter ${flutterCreateArgs(target).join(' ')}');
+      final temp = Directory.systemTemp.createTempSync('easy_flavor_create_');
+      try {
+        final progress = logger.progress('Generating a preview project');
+        final result = await processRunner.run(
+          'flutter',
+          flutterCreateArgs(p.join(temp.path, projectName)),
+        );
+        if (result.exitCode != 0) {
+          progress.fail();
+          throw ToolError('flutter create failed:\n${result.stderr}');
+        }
+        progress.complete();
+        return await runSetup(
+          context: contextFor(p.join(temp.path, projectName)),
+          config: config,
+        );
+      } finally {
+        temp.deleteSync(recursive: true);
+      }
     }
 
+    logger.info('${lightCyan.wrap('Step 1/2:')} flutter create');
+    await processRunner.runInherit('flutter', flutterCreateArgs(target));
     logger.info('${lightCyan.wrap('Step 2/2:')} configure flavors');
-    return runSetup(context: contextFor(target), config: config);
+    return runSetup(
+      context: contextFor(target),
+      config: config,
+      allowWrite: true,
+    );
   }
 }

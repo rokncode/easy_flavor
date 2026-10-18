@@ -8,11 +8,14 @@ import '../core/summary.dart';
 
 /// Plans the changes for [config] and applies them (or prints them with
 /// `--dry-run`). Shared by create, init, add and remove.
+///
+/// [allowWrite] is only set for freshly created projects until backups exist.
 Future<int> runSetup({
   required ProjectContext context,
   required EasyFlavorConfig config,
   EasyFlavorConfig? previous,
   bool confirm = false,
+  bool allowWrite = false,
 }) async {
   final logger = context.logger;
   logger.info('');
@@ -45,10 +48,16 @@ Future<int> runSetup({
     );
   }
 
-  // TODO(step 5): git status check, backups to .easy_flavor_backup/, write.
-  logger.warn(
-    'Writing files is not implemented yet (scaffold build); nothing was changed.',
-  );
+  if (!allowWrite) {
+    // TODO(step 5): git status check, backups to .easy_flavor_backup/, write.
+    logger.warn(
+      'Changing existing projects is enabled once backups are implemented '
+      '(step 5); nothing was changed.',
+    );
+    return ExitCode.success.code;
+  }
+  changes.apply();
+  logger.success('Flavors configured in ${context.root}.');
 
   printRunCommands(logger, config);
   return ExitCode.success.code;

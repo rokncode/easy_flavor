@@ -84,4 +84,30 @@ class ChangeSet {
     final f = File(p.join(root, key));
     return f.existsSync() ? f.readAsStringSync() : null;
   }
+
+  /// Writes every change to disk. Directories emptied by deletions are
+  /// removed, up to (not including) [root].
+  void apply() {
+    for (final c in _changes.values) {
+      final file = File(p.join(root, c.path));
+      if (c.kind == ChangeKind.delete) {
+        if (file.existsSync()) file.deleteSync();
+        _removeEmptyParents(file.parent);
+      } else {
+        file.parent.createSync(recursive: true);
+        file.writeAsStringSync(c.after!);
+      }
+    }
+  }
+
+  void _removeEmptyParents(Directory dir) {
+    final rootPath = p.normalize(p.absolute(root));
+    var current = dir;
+    while (p.isWithin(rootPath, p.normalize(p.absolute(current.path))) &&
+        current.existsSync() &&
+        current.listSync().isEmpty) {
+      current.deleteSync();
+      current = current.parent;
+    }
+  }
 }

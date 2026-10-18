@@ -90,7 +90,7 @@ class InitCommand extends EasyFlavorCommand {
       file: file,
       cli: cli,
       baseId: androidId ?? iosId ?? fallbackId,
-      iosBaseId: iosId ?? androidId ?? fallbackId,
+      iosBaseId: iosId ?? iosBundleIdFromAndroid(androidId ?? fallbackId),
       baseAppName: titleCaseFromPackage(packageName),
     );
     if (androidId == null && iosId == null) {

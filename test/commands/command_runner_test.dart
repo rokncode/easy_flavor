@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
 import '../helpers/capture.dart';
+import '../helpers/fake_process_runner.dart';
 import '../helpers/fixtures.dart';
 
 void main() {
@@ -82,6 +83,28 @@ void main() {
       },
     );
 
+    test('runs flutter create and writes the flavor setup', () async {
+      final runner = FakeProcessRunner();
+      final r = await runCli([
+        'create', 'shop_app', '-C', parent.path, '--flavors', 'dev,prod', //
+      ], processRunner: runner);
+      expect(r.exitCode, 0, reason: r.output);
+      final root = p.join(parent.path, 'shop_app');
+      expect(
+        runner.calls.single,
+        containsAllInOrder(['flutter', 'create', '--org']),
+      );
+      expect(File(p.join(root, 'lib', 'main_dev.dart')).existsSync(), isTrue);
+      expect(
+        File(p.join(root, 'easy_flavor.yaml')).readAsStringSync(),
+        contains('com.example.shopapp.dev'),
+      );
+      expect(
+        r.stdout,
+        contains('flutter run --flavor dev -t lib/main_dev.dart'),
+      );
+    });
+
     test('validates the project name', () async {
       final r = await runCli([
         'create',
@@ -126,6 +149,60 @@ void main() {
       expect(r.stdout, contains('Yaml Dev'));
       expect(r.stdout, contains('Flag Prod'));
       expect(r.stdout, contains('com.y.app'));
+    });
+
+    for (final (fixture, id) in [
+      ('fresh_kts', 'com.acme.fresh_app'),
+      ('groovy', 'com.legacy.legacy_app'),
+    ]) {
+      test('uses the detected applicationId as prod ($fixture)', () async {
+        final dir = copyFixture(fixture);
+        final r = await runCli([
+          'init',
+          '-C',
+          dir.path,
+          '--flavors',
+          'dev,prod',
+          '--dry-run',
+        ]);
+        expect(r.exitCode, 0, reason: r.output);
+        expect(
+          r.stdout,
+          matches(RegExp('prod\\s+\\S.*\\s${RegExp.escape(id)}\\s')),
+        );
+        expect(r.stdout, contains('$id.dev'));
+        expect(
+          r.stdout,
+          contains('${id.replaceAll('_app', 'App')}.dev'),
+          reason: 'iOS id',
+        );
+        expect(r.stdout, contains('modify  android/app/'));
+        expect(r.output, isNot(contains('Could not detect')));
+      });
+    }
+
+    test('aborts on unmanaged flavors without --merge', () async {
+      final dir = copyFixture('existing_flavors');
+      final r = await runCli([
+        'init',
+        '-C',
+        dir.path,
+        '--flavors',
+        'dev,prod',
+        '--dry-run',
+      ]);
+      expect(r.exitCode, isNot(0));
+      expect(r.output, contains('already has flavors: dev, prod'));
+    });
+
+    test('does not write existing projects yet', () async {
+      final dir = copyFixture('fresh_kts');
+      final r = await runCli(['init', '-C', dir.path, '--flavors', 'dev,prod']);
+      expect(r.exitCode, 0, reason: r.output);
+      expect(
+        File(p.join(dir.path, 'lib', 'main_dev.dart')).existsSync(),
+        isFalse,
+      );
     });
 
     test('fails outside a Flutter project', () async {

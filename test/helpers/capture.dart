@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:easy_flavor/easy_flavor.dart';
+import 'package:easy_flavor/src/core/process_runner.dart';
 import 'package:mason_logger/mason_logger.dart';
+
+import 'fake_process_runner.dart';
 
 /// Result of running the CLI in-process.
 class RunResult {
@@ -17,7 +20,10 @@ class RunResult {
 
 /// Runs `easy_flavor [args]` in-process with captured, colorless output and
 /// prompts disabled.
-Future<RunResult> runCli(List<String> args) async {
+Future<RunResult> runCli(
+  List<String> args, {
+  ProcessRunner? processRunner,
+}) async {
   final out = _FakeStdout();
   final err = _FakeStdout();
   late int code;
@@ -25,6 +31,7 @@ Future<RunResult> runCli(List<String> args) async {
     () => overrideAnsiOutput(false, () async {
       code = await EasyFlavorCommandRunner(
         logger: Logger(),
+        processRunner: processRunner ?? FakeProcessRunner(),
       ).run(['--no-interactive', ...args]);
     }),
     stdout: () => out,

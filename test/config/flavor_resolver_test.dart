@@ -107,5 +107,10 @@ firebase: true
     expect(bundleSegmentFromPackage('my_cool_app'), 'mycoolapp');
     expect(defaultBundleId('com.a', 'production'), 'com.a');
     expect(defaultAppName('A', 'qa'), 'A Qa');
+    expect(
+      iosBundleIdFromAndroid('com.acme_co.my_cool_app'),
+      'com.acmeCo.myCoolApp',
+    );
+    expect(iosBundleIdFromAndroid('com.acme.app'), 'com.acme.app');
   });
 }
