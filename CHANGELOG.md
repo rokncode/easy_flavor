@@ -1,3 +1,12 @@
+## 0.1.1
+
+- Fix iOS builds of projects that already used Firebase: an existing
+  `GoogleService-Info.plist` in the Runner's Copy Bundle Resources is now
+  removed from that phase (the file reference is kept), since the
+  `[easy_flavor] Copy GoogleService-Info.plist` build phase copies the
+  flavor's plist to the same place ("Multiple commands produce
+  .../GoogleService-Info.plist"). `doctor` reports the conflict.
+
 ## 0.1.0
 
 Initial release.

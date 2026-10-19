@@ -14,6 +14,8 @@ import 'firebase_tools.dart';
 
 const copyPlistPhaseName = '[easy_flavor] Copy GoogleService-Info.plist';
 
+const serviceInfoPlist = 'GoogleService-Info.plist';
+
 String googleServicesJsonPath(String flavor) =>
     'android/app/src/$flavor/google-services.json';
 
@@ -137,6 +139,17 @@ class FirebaseGenerator implements Generator, Checker {
     }
 
     if (hasIos) {
+      _updatePbxproj(changes, (x) {
+        // A plist already bundled as a resource (the usual single-project
+        // Firebase setup) would be produced twice: "Multiple commands
+        // produce .../GoogleService-Info.plist".
+        for (final path in x.removeBundleResourcesNamed(serviceInfoPlist)) {
+          context.logger.info(
+            'Removed $path from Copy Bundle Resources; the flavor\'s plist is '
+            'copied by the "$copyPlistPhaseName" build phase instead.',
+          );
+        }
+      });
       _updatePbxproj(
         changes,
         (x) => x.setScriptPhase(
@@ -202,6 +215,19 @@ class FirebaseGenerator implements Generator, Checker {
     }
     if (hasIos) {
       final xcode = XcodeProject.parse(context.readOrNull(pbxprojFile)!);
+      final bundled = XcodeProject.parse(
+        context.readOrNull(pbxprojFile)!,
+      ).removeBundleResourcesNamed(serviceInfoPlist);
+      if (bundled.isNotEmpty) {
+        issues.add(
+          Issue(
+            Severity.error,
+            '${bundled.join(', ')} is in Copy Bundle Resources as well as copied '
+            'by the easy_flavor build phase ("Multiple commands produce").',
+            fix: fix,
+          ),
+        );
+      }
       if (xcode.scriptPhaseNamed(copyPlistPhaseName) == null) {
         issues.add(
           const Issue(

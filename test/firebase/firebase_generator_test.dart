@@ -262,4 +262,69 @@ void main() {
       expect(firebase.check(contextFor(dir), config), isEmpty);
     },
   );
+
+  test(
+    'removes an existing GoogleService-Info.plist from Copy Bundle Resources',
+    () async {
+      // The usual pre-flavor Firebase setup: the plist is a Runner resource.
+      final dir = copyFixture('fresh_kts');
+      final xcode = XcodeProject.parse(read(dir, pbxprojFile));
+      final pbx = xcode.pbx;
+      pbx.add('AACED6046613BEEFAFAA70A1', {
+        'isa': 'PBXFileReference',
+        'lastKnownFileType': 'text.plist.xml',
+        'path': 'Runner/GoogleService-Info.plist',
+        'sourceTree': '<group>',
+      }, comment: 'GoogleService-Info.plist');
+      pbx.add(
+        'D47943A4E594549467AAF6AB',
+        {'isa': 'PBXBuildFile', 'fileRef': 'AACED6046613BEEFAFAA70A1'},
+        comment: 'GoogleService-Info.plist in Resources',
+      );
+      final phases = (xcode.appTarget.object['buildPhases']! as List)
+          .cast<String>();
+      final resources = phases.firstWhere(
+        (id) => pbx.object(id)!['isa'] == 'PBXResourcesBuildPhase',
+      );
+      (pbx.object(resources)!['files']! as List<Object>).add(
+        'D47943A4E594549467AAF6AB',
+      );
+      File(p.join(dir.path, pbxprojFile)).writeAsStringSync(xcode.encode());
+
+      final config = withFirebase(configOf(['dev', 'prod']));
+      const firebase = FirebaseGenerator(environment: {});
+      expect(
+        firebase.check(contextFor(dir), config).map((i) => i.message),
+        contains(contains('Multiple commands produce')),
+      );
+
+      final changes = await plan(dir, config, generators: generators);
+      final after = XcodeProject.parse(changes.read(pbxprojFile)!);
+      expect(after.pbx.object('D47943A4E594549467AAF6AB'), isNull);
+      expect(
+        (after.pbx.object(resources)!['files']! as List),
+        isNot(contains('D47943A4E594549467AAF6AB')),
+      );
+      expect(
+        after.pbx.object('AACED6046613BEEFAFAA70A1'),
+        isNotNull,
+        reason: 'file reference kept',
+      );
+      expect(after.scriptPhaseNamed(copyPlistPhaseName), isNotNull);
+
+      changes.apply();
+      fakeFlutterfireOutputs(dir, ['dev', 'prod']);
+      final again = await plan(
+        dir,
+        config,
+        previous: config,
+        generators: generators,
+      );
+      expect(
+        again.changes.where((c) => c.path == pbxprojFile),
+        isEmpty,
+        reason: 'idempotent',
+      );
+    },
+  );
 }

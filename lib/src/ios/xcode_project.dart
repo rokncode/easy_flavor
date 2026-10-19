@@ -238,6 +238,29 @@ class XcodeProject {
     pbx.remove(id);
   }
 
+  /// Removes files named [fileName] from the app target's Copy Bundle
+  /// Resources phase (the file references themselves are kept). Returns the
+  /// paths of the removed files.
+  List<String> removeBundleResourcesNamed(String fileName) {
+    final removed = <String>[];
+    for (final phaseId in _appBuildPhaseIds) {
+      final phase = pbx.object(phaseId);
+      if (phase?['isa'] != 'PBXResourcesBuildPhase') continue;
+      final files = phase!['files']! as List<Object>;
+      for (final buildFileId in [...files.cast<String>()]) {
+        final fileRef = pbx.object(buildFileId)?['fileRef'];
+        final ref = fileRef is String ? pbx.object(fileRef) : null;
+        final path = ref?['path'];
+        if (path is String && p.posix.basename(path) == fileName) {
+          files.remove(buildFileId);
+          pbx.remove(buildFileId);
+          removed.add(path);
+        }
+      }
+    }
+    return removed;
+  }
+
   /// The app target's build phase ids (the live list, for editing).
   List<Object> get _appBuildPhases =>
       appTarget.object['buildPhases']! as List<Object>;

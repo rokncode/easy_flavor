@@ -290,6 +290,14 @@ undoes those edits and uses its own build phase, so the project file stays
 under easy_flavor's control. FlutterFire's Gradle changes (the
 google-services plugin) are kept.
 
+**Projects that already used Firebase:** an existing
+`ios/Runner/GoogleService-Info.plist` is removed from the Runner's Copy
+Bundle Resources (the file stays in the project), because the build phase
+above now provides the plist. Also remove the old `Firebase.initializeApp`
+call from `runMainApp()`, since each entry point initialises Firebase with
+its flavor's options, and delete the old `lib/firebase_options.dart` and
+`android/app/google-services.json`.
+
 Re-running `init` only calls `flutterfire configure` again for flavors whose
 project or ids changed, or whose files are missing. Delete a flavor's options
 file to force it.
